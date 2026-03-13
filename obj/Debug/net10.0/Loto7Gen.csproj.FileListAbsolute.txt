@@ -12,3 +12,4 @@
 /Users/sanggikim/.openclaw/workspace/Loto7Gen/obj/Debug/net10.0/Loto7Gen.pdb
 /Users/sanggikim/.openclaw/workspace/Loto7Gen/obj/Debug/net10.0/Loto7Gen.genruntimeconfig.cache
 /Users/sanggikim/.openclaw/workspace/Loto7Gen/obj/Debug/net10.0/ref/Loto7Gen.dll
+/Users/sanggikim/.openclaw/workspace/Loto7Gen/obj/Debug/net10.0/Loto7Gen.sourcelink.json

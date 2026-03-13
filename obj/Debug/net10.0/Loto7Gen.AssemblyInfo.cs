@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Loto7Gen")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5f600427ca613fadc47f2400d567a4965745597f")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+2c0ec377bcd0161c91073acc3a7ab06dfe329b7f")]
 [assembly: System.Reflection.AssemblyProductAttribute("Loto7Gen")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Loto7Gen")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
