@@ -118,11 +118,16 @@ namespace Loto7Gen
 
         static List<int> GenerateUntil(Func<List<int>> generator, Func<List<int>, bool> filter)
         {
-            while (true)
+            int maxAttempts = 100000;
+            for (int i = 0; i < maxAttempts; i++)
             {
                 var nums = generator();
                 if (filter(nums)) return nums;
             }
+            
+            // 10만 번 실패 시, 임의로 필터 없이 한 게임을 생성하여 무한 루프 방지
+            Console.WriteLine("경고: 10만 번 시도했으나 필터 조건을 만족하는 조합을 찾지 못해 기본 난수로 대체합니다.");
+            return generator();
         }
     }
 
@@ -161,7 +166,8 @@ namespace Loto7Gen
 
     public class Stats
     {
-        Random _rand = new Random();
+        // 전역으로 단일 Random 인스턴스 사용
+        static readonly Random _rand = new Random();
         double[] _weights = new double[38];
         Dictionary<int, List<int>> _markov = new Dictionary<int, List<int>>();
 
