@@ -15,15 +15,15 @@ namespace Loto7Gen
         {
             if (args.Length == 0)
             {
-                Console.WriteLine("사용법: Loto7Gen generate | verify 1 2 3 4 5 6 7");
+                Console.WriteLine("사용법: Loto7Gen generate | verify 1 2 3 4 5 6 7 | backtest");
                 return;
             }
 
             var history = LoadOrGenerateHistory();
-            var stats = new Stats(history);
 
             if (args[0] == "generate")
             {
+                var stats = new Stats(history);
                 GenerateNumbers(stats);
             }
             else if (args[0] == "verify" && args.Length == 8)
@@ -31,19 +31,57 @@ namespace Loto7Gen
                 var winning = args.Skip(1).Select(int.Parse).OrderBy(x => x).ToList();
                 VerifyNumbers(winning);
             }
+            else if (args[0] == "backtest")
+            {
+                RunBacktest(history);
+            }
             else
             {
                 Console.WriteLine("잘못된 명령입니다.");
             }
         }
 
+        static void RunBacktest(List<int[]> fullHistory)
+        {
+            int m = 100; // 과거 100회차 데이터 사용
+            if (fullHistory.Count <= m)
+            {
+                Console.WriteLine($"히스토리 데이터가 부족합니다 (최소 {m + 1}회차 필요).");
+                return;
+            }
+
+            Console.WriteLine($"=== 백테스팅 시작 (과거 {m}회차 기반 다음 1회 예측) ===");
+            
+            double totalMatches = 0;
+            int testCount = fullHistory.Count - m;
+
+            for (int i = m; i < fullHistory.Count; i++)
+            {
+                var trainData = fullHistory.Skip(i - m).Take(m).ToList();
+                var actualWinning = fullHistory[i];
+
+                var stats = new Stats(trainData);
+                
+                // 대표적으로 Combo_1_2_3 모델을 사용 (또는 무작위 5게임 중 최고 등등)
+                // 속도를 위해 1게임만 생성하여 비교
+                var predicted = GenerateUntil(stats.GenerateAssociationWeighted, 
+                    nums => Filters.CheckSum(nums) && Filters.CheckHighLow(nums) && Filters.CheckOddEven(nums));
+
+                int matchCount = predicted.Intersect(actualWinning).Count();
+                totalMatches += matchCount;
+            }
+
+            Console.WriteLine($"테스트 횟수: {testCount}회");
+            Console.WriteLine($"평균 일치 개수: {totalMatches / testCount:F2}개");
+        }
+
         static void GenerateNumbers(Stats stats)
         {
-            Console.WriteLine("=== 로또 7 번호 생성 시작 ===");
+            Console.WriteLine("=== 로또 7 번호 생성 시작 (V2.0) ===");
             var results = new Dictionary<string, List<int>>();
 
             // 1. 1, 2, 3 조합 (Sum, HighLow, OddEven)
-            results["Combo_1_2_3"] = GenerateUntil(stats.GenerateRandom, 
+            results["Combo_1_2_3"] = GenerateUntil(stats.GenerateAssociationWeighted, 
                 nums => Filters.CheckSum(nums) && Filters.CheckHighLow(nums) && Filters.CheckOddEven(nums));
 
             // 2. 3, 4 조합 (OddEven, Weighted)
@@ -90,11 +128,6 @@ namespace Loto7Gen
                 var matchCount = kvp.Value.Intersect(winning).Count();
                 Console.WriteLine($"[{kvp.Key}] {string.Join(", ", kvp.Value)} -> 일치: {matchCount}개");
             }
-
-            Console.WriteLine("\n[향후 보정 제안]");
-            Console.WriteLine("1. 당첨 번호의 총합이 100~160 범위를 벗어났는지 확인 (필터 1 조정 필요 여부)");
-            Console.WriteLine("2. 당첨 번호에 연속수가 너무 많거나 없는지 확인 (필터 5 조정 필요 여부)");
-            Console.WriteLine("3. 이번 당첨번호를 history.json에 추가하여 가중치(4)와 마르코프 전이행렬(6)을 업데이트해야 합니다.");
         }
 
         static List<int[]> LoadOrGenerateHistory()
@@ -104,10 +137,10 @@ namespace Loto7Gen
                 return JsonSerializer.Deserialize<List<int[]>>(File.ReadAllText(HistoryFile));
             }
             
-            Console.WriteLine("과거 100주치 가상 데이터를 생성합니다...");
+            Console.WriteLine("과거 150주치 가상 데이터를 생성합니다...");
             var rand = new Random();
             var history = new List<int[]>();
-            for (int i = 0; i < 100; i++)
+            for (int i = 0; i < 150; i++) // 백테스트를 위해 좀 더 넉넉하게
             {
                 var set = Enumerable.Range(1, 37).OrderBy(x => rand.Next()).Take(7).OrderBy(x => x).ToArray();
                 history.Add(set);
@@ -125,7 +158,6 @@ namespace Loto7Gen
                 if (filter(nums)) return nums;
             }
             
-            // 10만 번 실패 시, 임의로 필터 없이 한 게임을 생성하여 무한 루프 방지
             Console.WriteLine("경고: 10만 번 시도했으나 필터 조건을 만족하는 조합을 찾지 못해 기본 난수로 대체합니다.");
             return generator();
         }
@@ -166,31 +198,44 @@ namespace Loto7Gen
 
     public class Stats
     {
-        // 전역으로 단일 Random 인스턴스 사용
         static readonly Random _rand = new Random();
         double[] _weights = new double[38];
+        int[,] _pairCounts = new int[38, 38];
         Dictionary<int, List<int>> _markov = new Dictionary<int, List<int>>();
 
         public Stats(List<int[]> history)
         {
-            // Calculate frequencies
-            int[] counts = new int[38];
-            foreach (var set in history)
+            double[] counts = new double[38];
+            for (int i = 0; i < history.Count; i++)
             {
-                foreach (var n in set) counts[n]++;
+                var set = history[i];
+                // 1. Recency Bias: 최신 회차일수록 가중치 증가 (선형 감쇠/증가)
+                double recencyWeight = 1.0 + ((double)i / history.Count);
+
+                foreach (var n in set) 
+                    counts[n] += recencyWeight;
                 
-                // Build Markov transitions
-                for (int i = 0; i < set.Length - 1; i++)
+                // 2. Association Rules (연관 규칙): 동시 출현 빈도 추적
+                for (int j = 0; j < set.Length; j++)
                 {
-                    if (!_markov.ContainsKey(set[i])) _markov[set[i]] = new List<int>();
-                    _markov[set[i]].Add(set[i + 1]);
+                    for (int k = j + 1; k < set.Length; k++)
+                    {
+                        _pairCounts[set[j], set[k]]++;
+                        _pairCounts[set[k], set[j]]++;
+                    }
+
+                    if (j < set.Length - 1)
+                    {
+                        if (!_markov.ContainsKey(set[j])) _markov[set[j]] = new List<int>();
+                        _markov[set[j]].Add(set[j + 1]);
+                    }
                 }
             }
 
-            int total = counts.Sum();
+            double total = counts.Sum();
             for (int i = 1; i <= 37; i++)
             {
-                _weights[i] = counts[i] > 0 ? (double)counts[i] / total : 0.01;
+                _weights[i] = counts[i] > 0 ? counts[i] / total : 0.01;
             }
         }
 
@@ -209,6 +254,48 @@ namespace Loto7Gen
                 for (int i = 1; i <= 37; i++)
                 {
                     cumulative += _weights[i];
+                    if (r <= cumulative)
+                    {
+                        nums.Add(i);
+                        break;
+                    }
+                }
+            }
+            return nums.OrderBy(x => x).ToList();
+        }
+
+        public List<int> GenerateAssociationWeighted()
+        {
+            var nums = new HashSet<int>();
+            while (nums.Count < 7)
+            {
+                double[] currentWeights = new double[38];
+                double totalWeight = 0;
+
+                for (int i = 1; i <= 37; i++)
+                {
+                    if (nums.Contains(i)) continue;
+
+                    double baseW = _weights[i];
+                    double assocBonus = 1.0;
+
+                    foreach (var picked in nums)
+                    {
+                        assocBonus += _pairCounts[picked, i] * 0.1; 
+                    }
+
+                    double w = baseW * assocBonus;
+                    currentWeights[i] = w;
+                    totalWeight += w;
+                }
+
+                double r = _rand.NextDouble() * totalWeight;
+                double cumulative = 0.0;
+                for (int i = 1; i <= 37; i++)
+                {
+                    if (nums.Contains(i)) continue;
+                    
+                    cumulative += currentWeights[i];
                     if (r <= cumulative)
                     {
                         nums.Add(i);
@@ -241,11 +328,10 @@ namespace Loto7Gen
                     var nextList = _markov[current];
                     int next = nextList[_rand.Next(nextList.Count)];
                     
-                    // Prevent duplicates or going backwards (since lotto is sorted)
                     if (nums.Contains(next) || next <= current) 
                     {
                         next = Enumerable.Range(current + 1, 37 - current).OrderBy(x => _rand.Next()).FirstOrDefault();
-                        if (next == 0) next = GenerateRandom()[0]; // reset if stuck
+                        if (next == 0) next = GenerateRandom()[0];
                     }
                     
                     nums.Add(next);
@@ -253,7 +339,6 @@ namespace Loto7Gen
                 }
                 else
                 {
-                    // Fallback
                     int next = Enumerable.Range(current + 1, 37 - current).OrderBy(x => _rand.Next()).FirstOrDefault();
                     if (next == 0) next = GenerateRandom()[0];
                     nums.Add(next);
