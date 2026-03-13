@@ -15,7 +15,7 @@ namespace Loto7Gen
         {
             if (args.Length == 0)
             {
-                Console.WriteLine("사용법: Loto7Gen generate | verify 1 2 3 4 5 6 7 | backtest");
+                Console.WriteLine("사용법: Loto7Gen generate | verify 1 2 3 4 5 6 7 | backtest | optimize");
                 return;
             }
 
@@ -33,7 +33,11 @@ namespace Loto7Gen
             }
             else if (args[0] == "backtest")
             {
-                RunBacktest(history);
+                RunBacktestCmd(history);
+            }
+            else if (args[0] == "optimize")
+            {
+                RunOptimize(history);
             }
             else
             {
@@ -41,19 +45,29 @@ namespace Loto7Gen
             }
         }
 
-        static void RunBacktest(List<int[]> fullHistory)
+        static void RunBacktestCmd(List<int[]> fullHistory)
+        {
+            var result = RunBacktest(fullHistory, true);
+        }
+
+        static (long totalPrize, double totalMatches) RunBacktest(List<int[]> fullHistory, bool printOutput = false)
         {
             int m = 100; // 과거 100회차 데이터 사용
             if (fullHistory.Count <= m)
             {
-                Console.WriteLine($"히스토리 데이터가 부족합니다 (최소 {m + 1}회차 필요).");
-                return;
+                if (printOutput) Console.WriteLine($"히스토리 데이터가 부족합니다 (최소 {m + 1}회차 필요).");
+                return (0, 0);
             }
 
-            Console.WriteLine($"=== 백테스팅 시작 (과거 {m}회차 기반 다음 1회 예측) ===");
+            if (printOutput) Console.WriteLine($"=== 백테스팅 시작 (과거 {m}회차 기반 다음 1회 예측) ===");
             
             double totalMatches = 0;
             int testCount = fullHistory.Count - m;
+            int costPerGame = 300;
+            long totalCost = 0;
+            long totalPrize = 0;
+            
+            int[] matchDist = new int[8];
 
             for (int i = m; i < fullHistory.Count; i++)
             {
@@ -62,43 +76,96 @@ namespace Loto7Gen
 
                 var stats = new Stats(trainData);
                 
-                // 대표적으로 Combo_1_2_3 모델을 사용 (또는 무작위 5게임 중 최고 등등)
-                // 속도를 위해 1게임만 생성하여 비교
-                var predicted = GenerateUntil(stats.GenerateAssociationWeighted, 
-                    nums => Filters.CheckSum(nums) && Filters.CheckHighLow(nums) && Filters.CheckOddEven(nums));
+                var predictions = new List<List<int>>();
+                predictions.Add(GenerateUntil(stats.GenerateAssociationWeighted, nums => Filters.CheckSum(nums) && Filters.CheckHighLow(nums) && Filters.CheckOddEven(nums), printOutput));
+                predictions.Add(GenerateUntil(stats.GenerateWeighted, nums => Filters.CheckOddEven(nums), printOutput));
+                predictions.Add(GenerateUntil(stats.GenerateMarkovWeightedFirst, nums => Filters.CheckConsecutive(nums), printOutput));
+                predictions.Add(GenerateUntil(stats.GenerateMarkov, nums => Filters.CheckSum(nums) && Filters.CheckConsecutive(nums), printOutput));
+                predictions.Add(GenerateUntil(stats.GenerateMarkov, nums => Filters.CheckHighLow(nums), printOutput));
 
-                int matchCount = predicted.Intersect(actualWinning).Count();
-                totalMatches += matchCount;
+                foreach (var predicted in predictions)
+                {
+                    totalCost += costPerGame;
+                    int matchCount = predicted.Intersect(actualWinning).Count();
+                    totalMatches += matchCount;
+                    matchDist[matchCount]++;
+                    
+                    if (matchCount == 7) totalPrize += 600000000;
+                    else if (matchCount == 6) totalPrize += 730000;
+                    else if (matchCount == 5) totalPrize += 9100;
+                    else if (matchCount == 4) totalPrize += 1400;
+                    else if (matchCount == 3) totalPrize += 1000;
+                }
             }
 
-            Console.WriteLine($"테스트 횟수: {testCount}회");
-            Console.WriteLine($"평균 일치 개수: {totalMatches / testCount:F2}개");
+            if (printOutput)
+            {
+                Console.WriteLine($"테스트 횟수(회차): {testCount}회");
+                Console.WriteLine($"총 구매 게임 수: {testCount * 5}게임");
+                Console.WriteLine($"총 투자 비용: {totalCost:N0}엔");
+                Console.WriteLine($"총 당첨 금액(추정): {totalPrize:N0}엔");
+                Console.WriteLine($"순수익: {(totalPrize - totalCost):N0}엔 (수익률: {(double)totalPrize/totalCost * 100:F2}%)");
+                Console.WriteLine($"평균 일치 개수(1게임당): {totalMatches / (testCount * 5):F2}개");
+                Console.WriteLine($"--- 당첨 분포 ---");
+                for(int i=7; i>=3; i--) Console.WriteLine($"{i}개 일치: {matchDist[i]}번");
+            }
+            
+            return (totalPrize, totalMatches);
+        }
+
+        static void RunOptimize(List<int[]> fullHistory)
+        {
+            Console.WriteLine("=== 유전 알고리즘 / 파라미터 최적화 시작 ===");
+            var rand = new Random();
+            int generations = 50; // 수백 세대는 너무 오래 걸릴 수 있으므로 50세대로 제한
+            
+            double bestMatches = 0;
+            long bestPrize = 0;
+            string bestParams = "";
+
+            for (int i = 0; i < generations; i++)
+            {
+                Filters.MinSum = rand.Next(80, 110);
+                Filters.MaxSum = rand.Next(150, 190);
+                Stats.ColdBonusMultiplier = 1.0 + (rand.NextDouble() * 4.0); // 1.0 ~ 5.0
+                Stats.HotPenaltyMultiplier = rand.NextDouble(); // 0.0 ~ 1.0
+                
+                var (prize, matches) = RunBacktest(fullHistory, false);
+                
+                if (matches > bestMatches || (matches == bestMatches && prize > bestPrize))
+                {
+                    bestMatches = matches;
+                    bestPrize = prize;
+                    bestParams = $"MinSum: {Filters.MinSum}, MaxSum: {Filters.MaxSum}, ColdBonus: {Stats.ColdBonusMultiplier:F2}, HotPenalty: {Stats.HotPenaltyMultiplier:F2}";
+                    Console.WriteLine($"[새로운 최고 기록 세대 {i+1}] 일치수: {bestMatches}, 수익: {bestPrize:N0}엔 => {bestParams}");
+                }
+            }
+            
+            Console.WriteLine("\n=== 최적화 결과 ===");
+            Console.WriteLine($"최적 파라미터: {bestParams}");
+            Console.WriteLine($"최고 일치 횟수: {bestMatches}");
+            Console.WriteLine($"예상 수익: {bestPrize:N0}엔");
         }
 
         static void GenerateNumbers(Stats stats)
         {
-            Console.WriteLine("=== 로또 7 번호 생성 시작 (V2.0) ===");
+            Console.WriteLine("=== 로또 7 번호 생성 시작 (V3.0) ===");
             var results = new Dictionary<string, List<int>>();
 
-            // 1. 1, 2, 3 조합 (Sum, HighLow, OddEven)
             results["Combo_1_2_3"] = GenerateUntil(stats.GenerateAssociationWeighted, 
-                nums => Filters.CheckSum(nums) && Filters.CheckHighLow(nums) && Filters.CheckOddEven(nums));
+                nums => Filters.CheckSum(nums) && Filters.CheckHighLow(nums) && Filters.CheckOddEven(nums), true);
 
-            // 2. 3, 4 조합 (OddEven, Weighted)
             results["Combo_3_4"] = GenerateUntil(stats.GenerateWeighted, 
-                nums => Filters.CheckOddEven(nums));
+                nums => Filters.CheckOddEven(nums), true);
 
-            // 3. 4, 5, 6 조합 (Weighted, Consecutive, Markov)
             results["Combo_4_5_6"] = GenerateUntil(stats.GenerateMarkovWeightedFirst, 
-                nums => Filters.CheckConsecutive(nums));
+                nums => Filters.CheckConsecutive(nums), true);
 
-            // 4. 1, 5, 6 조합 (Sum, Consecutive, Markov)
             results["Combo_1_5_6"] = GenerateUntil(stats.GenerateMarkov, 
-                nums => Filters.CheckSum(nums) && Filters.CheckConsecutive(nums));
+                nums => Filters.CheckSum(nums) && Filters.CheckConsecutive(nums), true);
 
-            // 5. 2, 6 조합 (HighLow, Markov)
             results["Combo_2_6"] = GenerateUntil(stats.GenerateMarkov, 
-                nums => Filters.CheckHighLow(nums));
+                nums => Filters.CheckHighLow(nums), true);
 
             foreach (var kvp in results)
             {
@@ -140,7 +207,7 @@ namespace Loto7Gen
             Console.WriteLine("과거 150주치 가상 데이터를 생성합니다...");
             var rand = new Random();
             var history = new List<int[]>();
-            for (int i = 0; i < 150; i++) // 백테스트를 위해 좀 더 넉넉하게
+            for (int i = 0; i < 150; i++)
             {
                 var set = Enumerable.Range(1, 37).OrderBy(x => rand.Next()).Take(7).OrderBy(x => x).ToArray();
                 history.Add(set);
@@ -149,26 +216,29 @@ namespace Loto7Gen
             return history;
         }
 
-        static List<int> GenerateUntil(Func<List<int>> generator, Func<List<int>, bool> filter)
+        static List<int> GenerateUntil(Func<List<int>> generator, Func<List<int>, bool> filter, bool printWarning = false)
         {
-            int maxAttempts = 100000;
+            int maxAttempts = 10000; // 최적화 시 너무 오래 걸리는 것을 방지
             for (int i = 0; i < maxAttempts; i++)
             {
                 var nums = generator();
                 if (filter(nums)) return nums;
             }
             
-            Console.WriteLine("경고: 10만 번 시도했으나 필터 조건을 만족하는 조합을 찾지 못해 기본 난수로 대체합니다.");
+            if (printWarning) Console.WriteLine("경고: 최대 시도 횟수를 초과하여 기본 난수로 대체합니다.");
             return generator();
         }
     }
 
     public static class Filters
     {
+        public static int MinSum = 100;
+        public static int MaxSum = 160;
+
         public static bool CheckSum(List<int> nums)
         {
             int s = nums.Sum();
-            return s >= 100 && s <= 160;
+            return s >= MinSum && s <= MaxSum;
         }
 
         public static bool CheckHighLow(List<int> nums)
@@ -198,6 +268,9 @@ namespace Loto7Gen
 
     public class Stats
     {
+        public static double ColdBonusMultiplier = 2.0;
+        public static double HotPenaltyMultiplier = 0.5;
+
         static readonly Random _rand = new Random();
         double[] _weights = new double[38];
         int[,] _pairCounts = new int[38, 38];
@@ -206,16 +279,24 @@ namespace Loto7Gen
         public Stats(List<int[]> history)
         {
             double[] counts = new double[38];
+            int[] shortTermCounts = new int[38];
+            int shortTermWindow = 25;
+            
             for (int i = 0; i < history.Count; i++)
             {
                 var set = history[i];
-                // 1. Recency Bias: 최신 회차일수록 가중치 증가 (선형 감쇠/증가)
+                
                 double recencyWeight = 1.0 + ((double)i / history.Count);
 
                 foreach (var n in set) 
+                {
                     counts[n] += recencyWeight;
+                    if (i >= history.Count - shortTermWindow)
+                    {
+                        shortTermCounts[n]++;
+                    }
+                }
                 
-                // 2. Association Rules (연관 규칙): 동시 출현 빈도 추적
                 for (int j = 0; j < set.Length; j++)
                 {
                     for (int k = j + 1; k < set.Length; k++)
@@ -232,10 +313,41 @@ namespace Loto7Gen
                 }
             }
 
+            // 장단기 편향 보정 로직
+            int nTotal = history.Count;
+            int nShort = Math.Min(nTotal, shortTermWindow);
+            
+            double expectedTotal = nTotal * 7.0 / 37.0;
+            double expectedShort = nShort * 7.0 / 37.0;
+            
             double total = counts.Sum();
+            if (total == 0) total = 1;
+
             for (int i = 1; i <= 37; i++)
             {
-                _weights[i] = counts[i] > 0 ? counts[i] / total : 0.01;
+                double baseW = counts[i] > 0 ? counts[i] / total : 0.01;
+                
+                // 장기 Cold 보너스 (너무 안나온 번호)
+                double rawCount = counts[i] / (1.5); // 대략적인 raw count (가중치 제거)
+                if (rawCount < expectedTotal * 0.7)
+                {
+                    baseW *= ColdBonusMultiplier;
+                }
+                
+                // 단기 Hot 패널티 (최근 너무 많이 나온 번호)
+                if (shortTermCounts[i] > expectedShort * 1.5)
+                {
+                    baseW *= HotPenaltyMultiplier;
+                }
+                
+                _weights[i] = Math.Max(baseW, 0.001);
+            }
+            
+            // Re-normalize
+            double newTotal = _weights.Sum();
+            for (int i = 1; i <= 37; i++)
+            {
+                _weights[i] /= newTotal;
             }
         }
 
