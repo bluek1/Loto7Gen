@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using Microsoft.ML;
+using Microsoft.ML.Data;
+using Microsoft.ML.Transforms.Onnx;
 
 namespace Loto7Gen
 {
@@ -42,7 +45,7 @@ namespace Loto7Gen
         {
             if (args.Length == 0)
             {
-                Console.WriteLine("사용법: Loto7Gen generate [scoring|wma|markov|random] | backtest [scoring|wma|markov|random]");
+                Console.WriteLine("사용법: Loto7Gen generate [scoring|wma|markov|lstm|random] | backtest [scoring|wma|markov|lstm|random]");
                 return;
             }
 
@@ -91,7 +94,7 @@ namespace Loto7Gen
 
         static void GenerateDeterministic(List<int[]> history, string opt, Config config)
         {
-            Console.WriteLine($"=== Loto7Gen V5.0 확정 번호 추출 ({opt}) ===");
+            Console.WriteLine($"=== Loto7Gen V6.0 번호 추출 ({opt}) ===");
             var results = new Dictionary<string, List<int>>();
             var model = new DeterministicModels(history, config);
 
@@ -101,6 +104,8 @@ namespace Loto7Gen
                 results["WMA"] = model.GetWMA();
             if (opt == "markov" || opt == "all")
                 results["Markov"] = model.GetMarkov();
+            if (opt == "lstm" || opt == "all")
+                results["LSTM"] = model.GetLSTM();
             if (opt == "random" || opt == "all")
                 results["Random"] = model.GetRandom();
 
@@ -143,6 +148,7 @@ namespace Loto7Gen
                 if (opt == "scoring" || opt == "all") predictions.Add(model.GetScoring());
                 if (opt == "wma" || opt == "all") predictions.Add(model.GetWMA());
                 if (opt == "markov" || opt == "all") predictions.Add(model.GetMarkov());
+                if (opt == "lstm" || opt == "all") predictions.Add(model.GetLSTM());
                 if (opt == "random" || opt == "all") predictions.Add(model.GetRandom());
 
                 foreach (var predicted in predictions)
@@ -161,7 +167,7 @@ namespace Loto7Gen
             }
 
             Console.WriteLine($"테스트 횟수(회차): {testCount}회");
-            int gamesPerTest = (opt == "all") ? 4 : 1;
+            int gamesPerTest = (opt == "all") ? 5 : 1;
             Console.WriteLine($"총 구매 게임 수: {testCount * gamesPerTest}게임");
             Console.WriteLine($"총 투자 비용: {totalCost:N0}엔");
             Console.WriteLine($"총 당첨 금액(추정): {totalPrize:N0}엔");
@@ -299,10 +305,102 @@ namespace Loto7Gen
                 .ToList();
         }
 
+        public List<int> GetLSTM()
+        {
+            const string modelPath = "loto7_lstm.onnx";
+            if (!File.Exists(modelPath))
+            {
+                Console.WriteLine("Warning: LSTM 모델 파일이 없습니다. 랜덤으로 대체합니다.");
+                return GetRandom();
+            }
+
+            try
+            {
+                var mlContext = new MLContext();
+                
+                // Feature Extraction (동일한 전처리 로직)
+                var windowSize = 10;
+                if (_history.Count < windowSize) return GetRandom();
+                
+                var lastWindow = _history.Skip(_history.Count - windowSize).ToList();
+                var inputFeatures = new float[1 * 10 * 40]; // Batch * Seq * Dim
+
+                for (int i = 0; i < windowSize; i++)
+                {
+                    var draw = lastWindow[i];
+                    var features = ExtractFeatures(draw);
+                    Array.Copy(features, 0, inputFeatures, i * 40, 40);
+                }
+
+                var dataView = mlContext.Data.LoadFromEnumerable(new List<OnnxInput> { new OnnxInput { input = inputFeatures } });
+                
+                var pipeline = mlContext.Transforms.ApplyOnnxModel(
+                    outputColumnNames: new[] { "output" },
+                    inputColumnNames: new[] { "input" },
+                    modelFile: modelPath);
+
+                var transformedData = pipeline.Fit(dataView).Transform(dataView);
+                var probabilities = mlContext.Data.CreateEnumerable<OnnxOutput>(transformedData, reuseRowObject: false).First().output;
+
+                return Enumerable.Range(1, 37)
+                    .OrderByDescending(i => probabilities[i - 1])
+                    .Take(7)
+                    .OrderBy(x => x)
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"LSTM Error: {ex.Message}");
+                return GetRandom();
+            }
+        }
+
+        private float[] ExtractFeatures(int[] draws)
+        {
+            var features = new float[40];
+            foreach (var n in draws) features[n - 1] = 1.0f;
+            
+            var sum = draws.Sum();
+            var ac = CalculateACValue(draws);
+            var oddRatio = draws.Count(n => n % 2 != 0) / 7.0f;
+            
+            features[37] = (sum - 28) / (238.0f - 28.0f);
+            features[38] = ac / 15.0f;
+            features[39] = oddRatio;
+            
+            return features;
+        }
+
+        private int CalculateACValue(int[] numbers)
+        {
+            var sorted = numbers.OrderBy(x => x).ToArray();
+            var diffs = new HashSet<int>();
+            for (int i = 0; i < sorted.Length; i++)
+            {
+                for (int j = i + 1; j < sorted.Length; j++)
+                {
+                    diffs.Add(sorted[j] - sorted[i]);
+                }
+            }
+            return diffs.Count - (sorted.Length - 1);
+        }
+
         public List<int> GetRandom()
         {
             var rand = new Random();
             return Enumerable.Range(1, 37).OrderBy(x => rand.Next()).Take(7).OrderBy(x => x).ToList();
+        }
+
+        public class OnnxInput
+        {
+            [VectorType(1, 10, 40)]
+            public float[] input { get; set; }
+        }
+
+        public class OnnxOutput
+        {
+            [ColumnName("output")]
+            public float[] output { get; set; }
         }
     }
 }

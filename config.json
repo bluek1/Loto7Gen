@@ -1,15 +1,15 @@
 {
   "Scoring": {
-    "FrequencyWeight": 2.0,
+    "FrequencyWeight": 1.24,
     "ColdBonusThreshold": 5,
-    "ColdBonusValue": 10.0,
+    "ColdBonusValue": 11.62,
     "HotPenaltyThreshold": 1,
-    "HotPenaltyValue": 5.0
+    "HotPenaltyValue": 3.88
   },
   "WMA": {
-    "WindowSize": 20
+    "WindowSize": 79
   },
   "Markov": {
-    "WindowSize": 50
+    "WindowSize": 131
   }
 }
