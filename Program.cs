@@ -6,10 +6,37 @@ using System.Text.Json;
 
 namespace Loto7Gen
 {
+    public class Config
+    {
+        public ScoringConfig Scoring { get; set; } = new ScoringConfig();
+        public WMAConfig WMA { get; set; } = new WMAConfig();
+        public MarkovConfig Markov { get; set; } = new MarkovConfig();
+    }
+
+    public class ScoringConfig
+    {
+        public double FrequencyWeight { get; set; } = 1.0;
+        public int ColdBonusThreshold { get; set; } = 10;
+        public double ColdBonusValue { get; set; } = 5.0;
+        public int HotPenaltyThreshold { get; set; } = 0;
+        public double HotPenaltyValue { get; set; } = 3.0;
+    }
+
+    public class WMAConfig
+    {
+        public int WindowSize { get; set; } = 50;
+    }
+
+    public class MarkovConfig
+    {
+        public int WindowSize { get; set; } = 100;
+    }
+
     public class Program
     {
         const string HistoryFile = "history.json";
         const string PredictionFile = "predictions.json";
+        const string ConfigFile = "config.json";
 
         public static void Main(string[] args)
         {
@@ -19,6 +46,7 @@ namespace Loto7Gen
                 return;
             }
 
+            var config = LoadOrGenerateConfig();
             var history = LoadOrGenerateHistory();
 
             string cmd = args[0].ToLower();
@@ -26,11 +54,11 @@ namespace Loto7Gen
 
             if (cmd == "generate")
             {
-                GenerateDeterministic(history, opt);
+                GenerateDeterministic(history, opt, config);
             }
             else if (cmd == "backtest")
             {
-                RunBacktestCmd(history, opt);
+                RunBacktestCmd(history, opt, config);
             }
             else
             {
@@ -38,11 +66,34 @@ namespace Loto7Gen
             }
         }
 
-        static void GenerateDeterministic(List<int[]> history, string opt)
+        static Config LoadOrGenerateConfig()
         {
-            Console.WriteLine($"=== Loto7Gen V4.0 확정 번호 추출 ({opt}) ===");
+            if (File.Exists(ConfigFile))
+            {
+                try
+                {
+                    string json = File.ReadAllText(ConfigFile);
+                    return JsonSerializer.Deserialize<Config>(json) ?? new Config();
+                }
+                catch
+                {
+                    Console.WriteLine("config.json 형식이 잘못되었습니다. 기본값을 사용합니다.");
+                    return new Config();
+                }
+            }
+            
+            var defaultConfig = new Config();
+            var options = new JsonSerializerOptions { WriteIndented = true };
+            File.WriteAllText(ConfigFile, JsonSerializer.Serialize(defaultConfig, options));
+            Console.WriteLine("기본 설정 파일을 생성했습니다 (config.json).");
+            return defaultConfig;
+        }
+
+        static void GenerateDeterministic(List<int[]> history, string opt, Config config)
+        {
+            Console.WriteLine($"=== Loto7Gen V5.0 확정 번호 추출 ({opt}) ===");
             var results = new Dictionary<string, List<int>>();
-            var model = new DeterministicModels(history);
+            var model = new DeterministicModels(history, config);
 
             if (opt == "scoring" || opt == "all")
                 results["Scoring"] = model.GetScoring();
@@ -63,7 +114,7 @@ namespace Loto7Gen
             Console.WriteLine($"\n예측 결과가 '{PredictionFile}'에 저장되었습니다.");
         }
 
-        static void RunBacktestCmd(List<int[]> fullHistory, string opt)
+        static void RunBacktestCmd(List<int[]> fullHistory, string opt, Config config)
         {
             int m = 100; // 과거 100회차 데이터 사용
             if (fullHistory.Count <= m)
@@ -85,7 +136,7 @@ namespace Loto7Gen
             {
                 var trainData = fullHistory.Skip(i - m).Take(m).ToList();
                 var actualWinning = fullHistory[i];
-                var model = new DeterministicModels(trainData);
+                var model = new DeterministicModels(trainData, config);
                 
                 var predictions = new List<List<int>>();
 
@@ -143,9 +194,11 @@ namespace Loto7Gen
     public class DeterministicModels
     {
         private List<int[]> _history;
-        public DeterministicModels(List<int[]> history)
+        private Config _config;
+        public DeterministicModels(List<int[]> history, Config config)
         {
             _history = history;
+            _config = config;
         }
 
         public List<int> GetScoring()
@@ -168,13 +221,15 @@ namespace Loto7Gen
             for (int i = 1; i <= 37; i++)
             {
                 int coldPeriod = lastSeen[i] == -1 ? currentIndex : currentIndex - 1 - lastSeen[i];
-                double score = freq[i] * 1.0; 
+                double score = freq[i] * _config.Scoring.FrequencyWeight; 
                 
                 // Cold bonus
-                if (coldPeriod > 10) score += 5.0;
+                if (coldPeriod > _config.Scoring.ColdBonusThreshold) 
+                    score += _config.Scoring.ColdBonusValue;
                 
                 // Hot penalty
-                if (coldPeriod == 0) score -= 3.0;
+                if (coldPeriod <= _config.Scoring.HotPenaltyThreshold) 
+                    score -= _config.Scoring.HotPenaltyValue;
 
                 scores[i] = score;
             }
@@ -189,7 +244,7 @@ namespace Loto7Gen
         public List<int> GetWMA()
         {
             double[] scores = new double[38];
-            int window = Math.Min(50, _history.Count);
+            int window = Math.Min(_config.WMA.WindowSize, _history.Count);
             
             for (int i = _history.Count - window; i < _history.Count; i++)
             {
@@ -210,7 +265,7 @@ namespace Loto7Gen
         public List<int> GetMarkov()
         {
             double[,] trans = new double[38, 38];
-            int window = Math.Min(100, _history.Count);
+            int window = Math.Min(_config.Markov.WindowSize, _history.Count);
             var trainData = _history.Skip(_history.Count - window).ToList();
             
             for (int i = 0; i < trainData.Count - 1; i++)

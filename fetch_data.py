@@ -35,9 +35,9 @@ if not history:
     print("Could not parse history.")
     exit(1)
 
-latest_100 = history[-100:]
+latest_data = history
 
 with open('history.json', 'w') as f:
-    json.dump(latest_100, f)
+    json.dump(latest_data, f)
 
-print(f"Successfully saved {len(latest_100)} real draws to history.json.")
+print(f"Successfully saved {len(latest_data)} real draws to history.json.")
