@@ -39,7 +39,8 @@ public class ScoringPredictionStrategy(List<int[]> history, Config config) : IPr
             if (coldPeriod <= _config.Scoring.HotPenaltyThreshold)
                 score -= _config.Scoring.HotPenaltyValue;
 
-            scores[i] = score;
+            // 동점 시 항상 낮은 번호만 선택되는 편향 방지용 미세 난수
+            scores[i] = score + Random.Shared.NextDouble() * 1e-6;
         }
 
         return Enumerable.Range(1, 37)

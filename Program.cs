@@ -13,7 +13,7 @@ public class Program
     {
         if (args.Length == 0)
         {
-            Console.WriteLine("사용법: Loto7Gen generate [scoring|wma|markov|lstm|random] | backtest [scoring|wma|markov|lstm|random]");
+            Console.WriteLine("사용법: Loto7Gen generate [scoring|wma|markov|lstm|ensemble|random] | backtest [전략] [횟수]");
             return;
         }
 
@@ -22,6 +22,7 @@ public class Program
 
         string cmd = args[0].ToLower();
         string opt = args.Length > 1 ? args[1].ToLower() : "all";
+        int? testRounds = args.Length > 2 && int.TryParse(args[2], out int tr) ? tr : null;
 
         if (cmd == "generate")
         {
@@ -29,7 +30,7 @@ public class Program
         }
         else if (cmd == "backtest")
         {
-            RunBacktestCmd(history, opt, config);
+            RunBacktestCmd(history, opt, config, testRounds);
         }
         else
         {
@@ -62,7 +63,7 @@ public class Program
 
     private static void GeneratePredictions(List<int[]> history, string opt, Config config)
     {
-        Console.WriteLine($"=== Loto7Gen V6.0 번호 추출 ({opt}) ===");
+        Console.WriteLine($"=== Loto7Gen V7.0 번호 추출 ({opt}) ===");
 
         var strategies = SelectStrategies(history, config, opt);
         var results = new Dictionary<string, List<int>>();
@@ -82,7 +83,7 @@ public class Program
         Console.WriteLine($"\n예측 결과가 '{PredictionFile}'에 저장되었습니다.");
     }
 
-    private static void RunBacktestCmd(List<int[]> fullHistory, string opt, Config config)
+    private static void RunBacktestCmd(List<int[]> fullHistory, string opt, Config config, int? testRounds)
     {
         int m = 100;
         if (fullHistory.Count <= m)
@@ -91,17 +92,20 @@ public class Program
             return;
         }
 
-        Console.WriteLine($"=== 백테스팅 시작 (모델: {opt}, 과거 {m}회차 기반 다음 1회 예측) ===");
+        int maxTests = fullHistory.Count - m;
+        int testCount = testRounds.HasValue ? Math.Min(testRounds.Value, maxTests) : maxTests;
+        int startIdx = fullHistory.Count - testCount;
+
+        Console.WriteLine($"=== 백테스팅 시작 (모델: {opt}, 과거 {m}회차 기반 다음 1회 예측, {testCount}회 테스트) ===");
 
         double totalMatches = 0;
-        int testCount = fullHistory.Count - m;
         int costPerGame = 300;
         long totalCost = 0;
         long totalPrize = 0;
         int[] matchDist = new int[8];
         int gamesPerTest = 0;
 
-        for (int i = m; i < fullHistory.Count; i++)
+        for (int i = startIdx; i < fullHistory.Count; i++)
         {
             var trainData = fullHistory.Skip(i - m).Take(m).ToList();
             var actualWinning = fullHistory[i];
@@ -157,7 +161,14 @@ public class Program
     {
         if (File.Exists(HistoryFile))
         {
-            return JsonSerializer.Deserialize<List<int[]>>(File.ReadAllText(HistoryFile)) ?? [];
+            try
+            {
+                return JsonSerializer.Deserialize<List<int[]>>(File.ReadAllText(HistoryFile)) ?? [];
+            }
+            catch
+            {
+                Console.WriteLine("history.json 형식이 잘못되었습니다. 새 가상 데이터를 생성합니다.");
+            }
         }
 
         Console.WriteLine("과거 150주치 가상 데이터를 생성합니다...");

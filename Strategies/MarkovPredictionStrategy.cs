@@ -36,10 +36,14 @@ public class MarkovPredictionStrategy(List<int[]> history, Config config) : IPre
 
         foreach (var n in lastDraw)
         {
+            // 전이 확률 정규화: 행 합계로 나눠 번호 출현 빈도 편향 제거
+            double rowSum = 0;
             for (int nextN = 1; nextN <= 37; nextN++)
-            {
-                prob[nextN] += trans[n, nextN];
-            }
+                rowSum += trans[n, nextN];
+
+            if (rowSum == 0) continue;
+            for (int nextN = 1; nextN <= 37; nextN++)
+                prob[nextN] += trans[n, nextN] / rowSum;
         }
 
         return Enumerable.Range(1, 37)

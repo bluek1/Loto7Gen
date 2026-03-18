@@ -5,6 +5,7 @@
 #     "requests",
 # ]
 # ///
+import os
 import requests
 from bs4 import BeautifulSoup
 import json
@@ -217,7 +218,6 @@ def save_history(history: List[List[int]], filename: str = 'history.json') -> bo
     """
     try:
         # 백업 생성 (기존 파일이 있다면)
-        import os
         if os.path.exists(filename):
             backup_name = f"{filename}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             os.rename(filename, backup_name)

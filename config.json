@@ -11,5 +11,18 @@
   },
   "Markov": {
     "WindowSize": 131
+  },
+  "Ensemble": {
+    "ScoringWeight": 1.0,
+    "WmaWeight": 1.0,
+    "MarkovWeight": 1.0,
+    "LstmWeight": 1.5,
+    "Temperature": 0.5
+  },
+  "Filter": {
+    "SumMin": 100,
+    "SumMax": 160,
+    "ConsecutiveMin": 1,
+    "ConsecutiveMax": 2
   }
 }

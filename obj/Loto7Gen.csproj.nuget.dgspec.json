@@ -1,26 +1,32 @@
 {
   "format": 1,
   "restore": {
-    "/Users/sanggikim/.openclaw/workspace/Loto7Gen/Loto7Gen.csproj": {}
+    "C:\\work\\source\\repos\\Loto7Gen\\Loto7Gen.csproj": {}
   },
   "projects": {
-    "/Users/sanggikim/.openclaw/workspace/Loto7Gen/Loto7Gen.csproj": {
+    "C:\\work\\source\\repos\\Loto7Gen\\Loto7Gen.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/Users/sanggikim/.openclaw/workspace/Loto7Gen/Loto7Gen.csproj",
+        "projectUniqueName": "C:\\work\\source\\repos\\Loto7Gen\\Loto7Gen.csproj",
         "projectName": "Loto7Gen",
-        "projectPath": "/Users/sanggikim/.openclaw/workspace/Loto7Gen/Loto7Gen.csproj",
-        "packagesPath": "/Users/sanggikim/.nuget/packages/",
-        "outputPath": "/Users/sanggikim/.openclaw/workspace/Loto7Gen/obj/",
+        "projectPath": "C:\\work\\source\\repos\\Loto7Gen\\Loto7Gen.csproj",
+        "packagesPath": "C:\\Users\\PC\\.nuget\\packages\\",
+        "outputPath": "C:\\work\\source\\repos\\Loto7Gen\\obj\\",
         "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
         "configFilePaths": [
-          "/Users/sanggikim/.nuget/NuGet/NuGet.Config"
+          "C:\\Users\\PC\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [
           "net10.0"
         ],
         "sources": {
-          "/opt/homebrew/Cellar/dotnet/10.0.102/libexec/library-packs": {},
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "C:\\Program Files\\dotnet\\library-packs": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
@@ -49,6 +55,10 @@
               "target": "Package",
               "version": "[5.0.0, )"
             },
+            "Microsoft.ML.OnnxRuntime": {
+              "target": "Package",
+              "version": "[1.23.2, )"
+            },
             "Microsoft.ML.OnnxTransformer": {
               "target": "Package",
               "version": "[5.0.0, )"
@@ -70,7 +80,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "/opt/homebrew/Cellar/dotnet/10.0.102/libexec/sdk/10.0.102/PortableRuntimeIdentifierGraph.json",
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.102/PortableRuntimeIdentifierGraph.json",
           "packagesToPrune": {
             "Microsoft.CSharp": "(,4.7.32767]",
             "Microsoft.VisualBasic": "(,10.4.32767]",

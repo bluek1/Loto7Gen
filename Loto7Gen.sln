@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Loto7Gen", "Loto7Gen.csproj", "{7B0DEA11-4939-523E-FCE0-5594C7715157}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7B0DEA11-4939-523E-FCE0-5594C7715157}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7B0DEA11-4939-523E-FCE0-5594C7715157}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7B0DEA11-4939-523E-FCE0-5594C7715157}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7B0DEA11-4939-523E-FCE0-5594C7715157}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {DD025174-D7A5-414B-90D9-29B6B68C946C}
+	EndGlobalSection
+EndGlobal

@@ -5,6 +5,8 @@ public class Config
     public ScoringConfig Scoring { get; set; } = new();
     public WMAConfig WMA { get; set; } = new();
     public MarkovConfig Markov { get; set; } = new();
+    public EnsembleConfig Ensemble { get; set; } = new();
+    public FilterConfig Filter { get; set; } = new();
 }
 
 public class ScoringConfig
@@ -24,4 +26,21 @@ public class WMAConfig
 public class MarkovConfig
 {
     public int WindowSize { get; set; } = 100;
+}
+
+public class EnsembleConfig
+{
+    public double ScoringWeight { get; set; } = 1.0;
+    public double WmaWeight { get; set; } = 1.0;
+    public double MarkovWeight { get; set; } = 1.0;
+    public double LstmWeight { get; set; } = 1.5;
+    public double Temperature { get; set; } = 0.5;
+}
+
+public class FilterConfig
+{
+    public int SumMin { get; set; } = 100;
+    public int SumMax { get; set; } = 160;
+    public int ConsecutiveMin { get; set; } = 1;
+    public int ConsecutiveMax { get; set; } = 2;
 }
