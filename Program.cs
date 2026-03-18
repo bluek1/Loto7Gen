@@ -63,7 +63,7 @@ public class Program
 
     private static void GeneratePredictions(List<int[]> history, string opt, Config config)
     {
-        Console.WriteLine($"=== Loto7Gen V7.0 번호 추출 ({opt}) ===");
+        Console.WriteLine($"=== Loto7Gen V8.0 번호 추출 ({opt}) ===");
 
         var strategies = SelectStrategies(history, config, opt);
         var results = new Dictionary<string, List<int>>();

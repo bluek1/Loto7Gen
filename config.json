@@ -17,12 +17,28 @@
     "WmaWeight": 1.0,
     "MarkovWeight": 1.0,
     "LstmWeight": 1.5,
-    "Temperature": 0.5
+    "CoOccurWeight": 1.2,
+    "GapWeight": 1.0,
+    "Temperature": 0.5,
+    "AdaptiveWindow": 20,
+    "AdaptiveBlend": 0.5
   },
   "Filter": {
     "SumMin": 100,
     "SumMax": 160,
     "ConsecutiveMin": 1,
     "ConsecutiveMax": 2
+  },
+  "CoOccurrence": {
+    "WindowSize": 100,
+    "LiftWeight": 0.3
+  },
+  "Gap": {
+    "FrequencyWeight": 1.0,
+    "OverdueWeight": 2.0
+  },
+  "Portfolio": {
+    "TicketCount": 3,
+    "OverlapRatio": 0.3
   }
 }

@@ -11,10 +11,20 @@ public static class StrategyFactory
         var wma = new WmaPredictionStrategy(history, config);
         var markov = new MarkovPredictionStrategy(history, config);
         var lstm = new LstmPredictionStrategy(history, random);
+        var cooccur = new CoOccurrencePredictionStrategy(history, config);
+        var gap = new GapPredictionStrategy(history, config);
 
-        var subStrategies = new List<IPredictionStrategy> { scoring, wma, markov, lstm };
-        var ensemble = new EnsemblePredictionStrategy(subStrategies, config);
+        var subStrategies = new List<IPredictionStrategy> { scoring, wma, markov, lstm, cooccur, gap };
+        var ensemble = new EnsemblePredictionStrategy(subStrategies, config, history);
 
-        return [scoring, wma, markov, lstm, ensemble, random];
+        var strategies = new List<IPredictionStrategy>
+            { scoring, wma, markov, lstm, cooccur, gap, ensemble };
+
+        // 포트폴리오 티켓 추가
+        for (int t = 0; t < config.Portfolio.TicketCount; t++)
+            strategies.Add(new PortfolioPredictionStrategy(subStrategies, config, t));
+
+        strategies.Add(random);
+        return strategies;
     }
 }

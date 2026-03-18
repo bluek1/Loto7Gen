@@ -5,28 +5,32 @@ using System.Linq;
 namespace Loto7Gen.Strategies;
 
 /// <summary>
-/// 앙상블 전략: 4개 서브 전략(Scoring, WMA, Markov, LSTM)의 예측을
-/// 가중 투표로 결합하고, softmax 확률 샘플링 + 조합 필터를 적용.
+/// 앙상블 전략: 서브 전략들의 예측을 가중 투표로 결합.
+/// AdaptiveWindow > 0 이면 직전 N회차 성능 기반으로 가중치를 자동 조정.
 /// </summary>
 public class EnsemblePredictionStrategy : IPredictionStrategy
 {
     private readonly List<IPredictionStrategy> _subStrategies;
-    private readonly double[] _weights;
+    private readonly double[] _baseWeights;
     private readonly Config _config;
+    private readonly List<int[]>? _history;
 
     public string Key => "ensemble";
     public string DisplayName => "Ensemble";
 
-    public EnsemblePredictionStrategy(List<IPredictionStrategy> subStrategies, Config config)
+    public EnsemblePredictionStrategy(List<IPredictionStrategy> subStrategies, Config config, List<int[]>? history = null)
     {
         _subStrategies = subStrategies;
         _config = config;
-        _weights =
+        _history = history;
+        _baseWeights =
         [
             config.Ensemble.ScoringWeight,
             config.Ensemble.WmaWeight,
             config.Ensemble.MarkovWeight,
-            config.Ensemble.LstmWeight
+            config.Ensemble.LstmWeight,
+            config.Ensemble.CoOccurWeight,
+            config.Ensemble.GapWeight
         ];
     }
 
@@ -50,15 +54,80 @@ public class EnsemblePredictionStrategy : IPredictionStrategy
 
     private double[] ComputeEnsembleScores()
     {
+        double[] weights = ComputeAdaptiveWeights();
         double[] scores = new double[38];
         for (int s = 0; s < _subStrategies.Count; s++)
         {
-            double w = s < _weights.Length ? _weights[s] : 1.0;
+            double w = s < weights.Length ? weights[s] : 1.0;
             var predicted = _subStrategies[s].Predict();
             foreach (var num in predicted)
                 scores[num] += w;
         }
         return scores;
+    }
+
+    /// <summary>
+    /// 적응형 가중치 계산: 직전 AdaptiveWindow 회차에서 각 전략의 실제 성능으로 가중치 결정.
+    /// AdaptiveWindow == 0 이면 고정 가중치 사용.
+    /// </summary>
+    private double[] ComputeAdaptiveWeights()
+    {
+        int adaptiveWindow = _config.Ensemble.AdaptiveWindow;
+        if (adaptiveWindow <= 0 || _history == null || _history.Count < adaptiveWindow + 10)
+            return _baseWeights;
+
+        double[] matchSums = new double[_subStrategies.Count];
+        int evalCount = Math.Min(adaptiveWindow, _history.Count - 10);
+        int evalStart = _history.Count - evalCount;
+
+        for (int t = evalStart; t < _history.Count; t++)
+        {
+            var trainSlice = _history.Skip(Math.Max(0, t - 100)).Take(Math.Min(100, t)).ToList();
+            if (trainSlice.Count < 10) continue;
+
+            var actual = new HashSet<int>(_history[t]);
+            var tempStrategies = CreateTempStrategies(trainSlice);
+
+            for (int s = 0; s < tempStrategies.Count && s < matchSums.Length; s++)
+            {
+                var predicted = tempStrategies[s].Predict();
+                matchSums[s] += predicted.Count(n => actual.Contains(n));
+            }
+        }
+
+        // softmax로 가중치 변환 (기본 가중치와 블렌딩)
+        double maxMatch = matchSums.Max();
+        double[] adaptiveWeights = new double[_subStrategies.Count];
+        double expSum = 0;
+        for (int s = 0; s < _subStrategies.Count; s++)
+        {
+            adaptiveWeights[s] = Math.Exp((matchSums[s] - maxMatch) * 2.0);
+            expSum += adaptiveWeights[s];
+        }
+
+        double blendRatio = _config.Ensemble.AdaptiveBlend;
+        for (int s = 0; s < _subStrategies.Count; s++)
+        {
+            double normalized = (adaptiveWeights[s] / expSum) * _subStrategies.Count;
+            double baseW = s < _baseWeights.Length ? _baseWeights[s] : 1.0;
+            adaptiveWeights[s] = baseW * (1 - blendRatio) + normalized * blendRatio;
+        }
+
+        return adaptiveWeights;
+    }
+
+    private List<IPredictionStrategy> CreateTempStrategies(List<int[]> trainSlice)
+    {
+        var random = new RandomPredictionStrategy();
+        return
+        [
+            new ScoringPredictionStrategy(trainSlice, _config),
+            new WmaPredictionStrategy(trainSlice, _config),
+            new MarkovPredictionStrategy(trainSlice, _config),
+            new LstmPredictionStrategy(trainSlice, random),
+            new CoOccurrencePredictionStrategy(trainSlice, _config),
+            new GapPredictionStrategy(trainSlice, _config)
+        ];
     }
 
     /// <summary>
